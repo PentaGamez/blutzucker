@@ -84,12 +84,14 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject result = LibreApi.login(email, password, region);
                 String raw = result.toString();
 
+                // Region-Weiterleitung
                 JSONObject data = result.optJSONObject("data");
                 if (data != null && data.optBoolean("redirect", false)) {
                     String newRegion = data.optString("region", "eu");
                     result = LibreApi.login(email, password, newRegion);
                     data = result.optJSONObject("data");
                     prefs.edit().putString("region", newRegion).apply();
+                    region.equals(newRegion);
                 }
 
                 if (data == null) {
@@ -104,11 +106,20 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 String token = ticket.getString("token");
+
+                // accountId aus Login-Antwort holen
+                JSONObject user = data.optJSONObject("user");
+                String accountId = "";
+                if (user != null) {
+                    accountId = user.optString("id", "");
+                }
+
                 prefs.edit()
                     .putString("token", token)
                     .putString("region", region)
                     .putString("email", email)
                     .putString("password", password)
+                    .putString("accountId", accountId)
                     .apply();
 
                 handler.post(() -> {
@@ -125,12 +136,13 @@ public class MainActivity extends AppCompatActivity {
 
     void loadGlucose() {
         handler.post(() -> tvLastUpdated.setText("Wird geladen…"));
-        String token  = prefs.getString("token", null);
-        String region = prefs.getString("region", "eu");
+        String token     = prefs.getString("token", null);
+        String region    = prefs.getString("region", "eu");
+        String accountId = prefs.getString("accountId", "");
 
         new Thread(() -> {
             try {
-                JSONObject resp = LibreApi.getGlucose(token, region);
+                JSONObject resp = LibreApi.getGlucose(token, accountId, region);
                 String raw = resp.toString();
 
                 if (resp.optInt("status") == 401) {
@@ -138,7 +150,6 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                // data kann Array oder Objekt sein
                 JSONArray dataArr = null;
                 if (resp.has("data")) {
                     Object dataObj = resp.get("data");
@@ -160,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 JSONObject conn = dataArr.getJSONObject(0);
-                JSONObject m = conn.getJSONObject("glucoseMeasurement");
+                JSONObject m    = conn.getJSONObject("glucoseMeasurement");
 
                 double value   = m.getDouble("Value");
                 int trend      = m.optInt("TrendArrow", 3);
@@ -221,8 +232,13 @@ public class MainActivity extends AppCompatActivity {
             JSONObject data = result.optJSONObject("data");
             if (data != null) {
                 JSONObject ticket = data.optJSONObject("authTicket");
+                JSONObject user   = data.optJSONObject("user");
                 if (ticket != null) {
-                    prefs.edit().putString("token", ticket.getString("token")).apply();
+                    String accountId = user != null ? user.optString("id", "") : "";
+                    prefs.edit()
+                        .putString("token", ticket.getString("token"))
+                        .putString("accountId", accountId)
+                        .apply();
                     loadGlucose();
                     return;
                 }

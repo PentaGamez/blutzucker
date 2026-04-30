@@ -8,6 +8,7 @@ import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.work.*;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.concurrent.TimeUnit;
 
@@ -80,41 +81,29 @@ public class MainActivity extends AppCompatActivity {
 
         new Thread(() -> {
             try {
-                // Versuche Login mit gewählter Region
                 JSONObject result = LibreApi.login(email, password, region);
-                
-                // Debug: zeige rohe Antwort
-                String rawResponse = result.toString();
-                android.util.Log.d("GlucoseApp", "Login response: " + rawResponse);
+                String raw = result.toString();
 
-                int status = result.optInt("status", -1);
-                
-                // Region-Weiterleitung
                 JSONObject data = result.optJSONObject("data");
                 if (data != null && data.optBoolean("redirect", false)) {
                     String newRegion = data.optString("region", "eu");
-                    // Nochmal mit neuer Region versuchen
                     result = LibreApi.login(email, password, newRegion);
                     data = result.optJSONObject("data");
                     prefs.edit().putString("region", newRegion).apply();
                 }
 
                 if (data == null) {
-                    // Zeige was die API tatsächlich zurückgibt
-                    showError("API Antwort: " + rawResponse.substring(0, Math.min(200, rawResponse.length())));
-                    handler.post(() -> { btnLogin.setEnabled(true); btnLogin.setText("Verbinden"); });
+                    showError("Login fehlgeschlagen:\n" + raw.substring(0, Math.min(300, raw.length())));
                     return;
                 }
 
                 JSONObject ticket = data.optJSONObject("authTicket");
                 if (ticket == null) {
-                    showError("Kein Token erhalten. Antwort: " + data.toString().substring(0, Math.min(200, data.toString().length())));
-                    handler.post(() -> { btnLogin.setEnabled(true); btnLogin.setText("Verbinden"); });
+                    showError("Kein Token:\n" + data.toString().substring(0, Math.min(300, data.toString().length())));
                     return;
                 }
 
                 String token = ticket.getString("token");
-
                 prefs.edit()
                     .putString("token", token)
                     .putString("region", region)
@@ -130,50 +119,57 @@ public class MainActivity extends AppCompatActivity {
 
             } catch (Exception e) {
                 showError("Fehler: " + e.getMessage());
-                handler.post(() -> { btnLogin.setEnabled(true); btnLogin.setText("Verbinden"); });
             }
         }).start();
     }
 
     void loadGlucose() {
-        tvLastUpdated.setText("Wird geladen…");
+        handler.post(() -> tvLastUpdated.setText("Wird geladen…"));
         String token  = prefs.getString("token", null);
         String region = prefs.getString("region", "eu");
 
         new Thread(() -> {
             try {
-                JSONObject data = LibreApi.getGlucose(token, region);
-                android.util.Log.d("GlucoseApp", "Glucose response: " + data.toString());
+                JSONObject resp = LibreApi.getGlucose(token, region);
+                String raw = resp.toString();
 
-                if (data.optInt("status") == 401) {
+                if (resp.optInt("status") == 401) {
                     relogin();
                     return;
                 }
 
-                // Prüfe ob data-Array vorhanden
-                if (!data.has("data") || data.isNull("data")) {
-                    handler.post(() -> tvLastUpdated.setText("Keine Daten. Ist LibreLinkUp aktiviert?"));
+                // data kann Array oder Objekt sein
+                JSONArray dataArr = null;
+                if (resp.has("data")) {
+                    Object dataObj = resp.get("data");
+                    if (dataObj instanceof JSONArray) {
+                        dataArr = (JSONArray) dataObj;
+                    } else if (dataObj instanceof JSONObject) {
+                        String info = ((JSONObject) dataObj).toString();
+                        handler.post(() -> tvLastUpdated.setText("API Info: " + info.substring(0, Math.min(250, info.length()))));
+                        return;
+                    }
+                }
+
+                if (dataArr == null || dataArr.length() == 0) {
+                    handler.post(() -> tvLastUpdated.setText(
+                        "Keine Verbindungen.\nLibreLinkUp App öffnen und Einladung annehmen!\n\n" +
+                        raw.substring(0, Math.min(200, raw.length()))
+                    ));
                     return;
                 }
 
-                var dataArr = data.getJSONArray("data");
-                if (dataArr.length() == 0) {
-                    handler.post(() -> tvLastUpdated.setText("Keine Verbindungen gefunden. LibreLinkUp prüfen."));
-                    return;
-                }
+                JSONObject conn = dataArr.getJSONObject(0);
+                JSONObject m = conn.getJSONObject("glucoseMeasurement");
 
-                JSONObject measurement = dataArr
-                    .getJSONObject(0)
-                    .getJSONObject("glucoseMeasurement");
+                double value   = m.getDouble("Value");
+                int trend      = m.optInt("TrendArrow", 3);
+                boolean isMmol = m.optInt("GlucoseUnits", 0) == 0;
 
-                double value   = measurement.getDouble("Value");
-                int trendArrow = measurement.optInt("TrendArrow", 3);
-                boolean isMmol = measurement.optInt("GlucoseUnits", 0) == 0;
-
-                String[] arrows    = {"", "↓↓", "↓", "→", "↑", "↑↑"};
+                String[] arrows     = {"", "↓↓", "↓", "→", "↑", "↑↑"};
                 String[] trendNames = {"", "Schnell fallend", "Fallend", "Stabil", "Steigend", "Schnell steigend"};
-                String arrow     = trendArrow >= 1 && trendArrow <= 5 ? arrows[trendArrow] : "→";
-                String trendName = trendArrow >= 1 && trendArrow <= 5 ? trendNames[trendArrow] : "Stabil";
+                String arrow     = trend >= 1 && trend <= 5 ? arrows[trend] : "→";
+                String trendName = trend >= 1 && trend <= 5 ? trendNames[trend] : "Stabil";
                 String valStr    = isMmol ? String.format("%.1f", value) : String.valueOf((int) value);
                 String unit      = isMmol ? "mmol/L" : "mg/dL";
 
@@ -195,15 +191,16 @@ public class MainActivity extends AppCompatActivity {
 
                 GlucoseWidget.updateAll(this);
 
+                final String fVal = valStr, fUnit = unit, fArrow = arrow, fStatus = statusText, fTrend = trendName;
+                final int fColor = statusColor;
                 handler.post(() -> {
-                    tvValue.setText(valStr);
-                    tvValue.setTextColor(statusColor);
-                    tvTrend.setText(arrow);
-                    tvTrend.setTextColor(statusColor);
-                    tvStatus.setText(statusText + " · " + unit);
-                    tvStatus.setTextColor(statusColor);
-                    tvTime.setText(trendName);
-
+                    tvValue.setText(fVal);
+                    tvValue.setTextColor(fColor);
+                    tvTrend.setText(fArrow);
+                    tvTrend.setTextColor(fColor);
+                    tvStatus.setText(fStatus + " · " + fUnit);
+                    tvStatus.setTextColor(fColor);
+                    tvTime.setText(fTrend);
                     java.time.LocalTime now = java.time.LocalTime.now();
                     tvLastUpdated.setText(String.format("Zuletzt: %02d:%02d", now.getHour(), now.getMinute()));
                 });
@@ -216,11 +213,12 @@ public class MainActivity extends AppCompatActivity {
 
     void relogin() {
         try {
-            String email    = prefs.getString("email", "");
-            String password = prefs.getString("password", "");
-            String region   = prefs.getString("region", "eu");
-            JSONObject result = LibreApi.login(email, password, region);
-            JSONObject data   = result.optJSONObject("data");
+            JSONObject result = LibreApi.login(
+                prefs.getString("email", ""),
+                prefs.getString("password", ""),
+                prefs.getString("region", "eu")
+            );
+            JSONObject data = result.optJSONObject("data");
             if (data != null) {
                 JSONObject ticket = data.optJSONObject("authTicket");
                 if (ticket != null) {
@@ -229,10 +227,8 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
             }
-            handler.post(this::logout);
-        } catch (Exception e) {
-            handler.post(this::logout);
-        }
+        } catch (Exception ignored) {}
+        handler.post(this::logout);
     }
 
     void scheduleWorker() {

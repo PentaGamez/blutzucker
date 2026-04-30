@@ -3,29 +3,29 @@ plugins {
 }
 
 android {
-    namespace 'de.glucose.widget'
-    compileSdk 34
+    namespace = 'de.glucose.widget'
+    compileSdk = 34
 
     defaultConfig {
-        applicationId "de.glucose.widget"
-        minSdk 26
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        applicationId = "de.glucose.widget"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
     }
 
     buildTypes {
         debug {
-            debuggable true
+            debuggable = true
         }
         release {
-            minifyEnabled false
+            minifyEnabled = false
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 

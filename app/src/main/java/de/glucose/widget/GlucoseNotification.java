@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.*;
-import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
@@ -96,14 +95,8 @@ public class GlucoseNotification {
                 .setPriority(NotificationCompat.PRIORITY_LOW);
 
         // Bitmap-Icon setzen (zeigt den Wert in der Statusleiste)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setSmallIcon(
-                IconCompat.createWithBitmap(iconBitmap).toIcon(ctx)
-            );
-        } else {
-            // Fallback für ältere Android-Versionen
-            builder.setSmallIcon(R.drawable.ic_notif);
-        }
+        // IconCompat direkt übergeben – nicht .toIcon() aufrufen, da setSmallIcon(IconCompat) erwartet wird
+        builder.setSmallIcon(IconCompat.createWithBitmap(iconBitmap));
 
         NotificationManagerCompat.from(ctx).notify(NOTIF_ID, builder.build());
     }

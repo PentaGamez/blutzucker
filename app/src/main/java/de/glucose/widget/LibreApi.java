@@ -1,267 +1,61 @@
 package de.glucose.widget;
 
-import android.content.SharedPreferences;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.View;
-import android.widget.*;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.work.*;
-import org.json.JSONArray;
 import org.json.JSONObject;
-import java.util.concurrent.TimeUnit;
+import okhttp3.*;
 
-public class MainActivity extends AppCompatActivity {
+public class LibreApi {
 
-    SharedPreferences prefs;
-    Handler handler = new Handler(Looper.getMainLooper());
+    private static final OkHttpClient client = new OkHttpClient.Builder()
+            .followRedirects(true)
+            .build();
 
-    View loginLayout, mainLayout;
-    EditText etEmail, etPassword;
-    Spinner spRegion;
-    Button btnLogin;
-    TextView tvLoginError;
-    TextView tvValue, tvTrend, tvStatus, tvTime, tvLastUpdated;
-    Button btnRefresh, btnLogout;
+    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+    private static Headers libreHeaders(String token) {
+        Headers.Builder b = new Headers.Builder()
+                .add("Content-Type", "application/json")
+                .add("product", "llu.android")
+                .add("version", "4.16.0")
+                .add("Accept", "application/json")
+                .add("Accept-Encoding", "gzip")
+                .add("Cache-Control", "no-cache")
+                .add("Connection", "keep-alive")
+                .add("Pragma", "no-cache")
+                .add("account-id", "")
+                .add("User-Agent", "okhttp/4.9.3");
+        if (token != null) b.add("Authorization", "Bearer " + token);
+        return b.build();
+    }
 
-        prefs = getSharedPreferences("glucose", MODE_PRIVATE);
+    public static JSONObject login(String email, String password, String region) throws Exception {
+        String url = "https://api-" + region + ".libreview.io/llu/auth/login";
+        JSONObject body = new JSONObject();
+        body.put("email", email);
+        body.put("password", password);
 
-        loginLayout   = findViewById(R.id.loginLayout);
-        mainLayout    = findViewById(R.id.mainLayout);
-        etEmail       = findViewById(R.id.etEmail);
-        etPassword    = findViewById(R.id.etPassword);
-        spRegion      = findViewById(R.id.spRegion);
-        btnLogin      = findViewById(R.id.btnLogin);
-        tvLoginError  = findViewById(R.id.tvLoginError);
-        tvValue       = findViewById(R.id.tvValue);
-        tvTrend       = findViewById(R.id.tvTrend);
-        tvStatus      = findViewById(R.id.tvStatus);
-        tvTime        = findViewById(R.id.tvTime);
-        tvLastUpdated = findViewById(R.id.tvLastUpdated);
-        btnRefresh    = findViewById(R.id.btnRefresh);
-        btnLogout     = findViewById(R.id.btnLogout);
+        Request req = new Request.Builder()
+                .url(url)
+                .headers(libreHeaders(null))
+                .post(RequestBody.create(body.toString(), JSON))
+                .build();
 
-        ArrayAdapter<String> regionAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item,
-                new String[]{"eu", "de", "us", "ap", "ae"});
-        regionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spRegion.setAdapter(regionAdapter);
-
-        btnLogin.setOnClickListener(v -> doLogin());
-        btnRefresh.setOnClickListener(v -> loadGlucose());
-        btnLogout.setOnClickListener(v -> logout());
-
-        String token = prefs.getString("token", null);
-        if (token != null) {
-            showMain();
-            loadGlucose();
-            scheduleWorker();
+        try (Response resp = client.newCall(req).execute()) {
+            return new JSONObject(resp.body().string());
         }
     }
 
-    void doLogin() {
-        String email    = etEmail.getText().toString().trim();
-        String password = etPassword.getText().toString();
-        String region   = spRegion.getSelectedItem().toString();
+    public static JSONObject getGlucose(String token, String region) throws Exception {
+        String url = "https://api-" + region + ".libreview.io/llu/connections";
 
-        if (email.isEmpty() || password.isEmpty()) {
-            showError("Bitte E-Mail und Passwort eingeben.");
-            return;
+        Request req = new Request.Builder()
+                .url(url)
+                .headers(libreHeaders(token))
+                .get()
+                .build();
+
+        try (Response resp = client.newCall(req).execute()) {
+            if (resp.code() == 401) return new JSONObject("{\"status\":401}");
+            return new JSONObject(resp.body().string());
         }
-
-        btnLogin.setEnabled(false);
-        btnLogin.setText("Verbinden…");
-        tvLoginError.setVisibility(View.GONE);
-
-        new Thread(() -> {
-            try {
-                JSONObject result = LibreApi.login(email, password, region);
-                String raw = result.toString();
-
-                JSONObject data = result.optJSONObject("data");
-                if (data != null && data.optBoolean("redirect", false)) {
-                    String newRegion = data.optString("region", "eu");
-                    result = LibreApi.login(email, password, newRegion);
-                    data = result.optJSONObject("data");
-                    prefs.edit().putString("region", newRegion).apply();
-                }
-
-                if (data == null) {
-                    showError("Login fehlgeschlagen:\n" + raw.substring(0, Math.min(300, raw.length())));
-                    return;
-                }
-
-                JSONObject ticket = data.optJSONObject("authTicket");
-                if (ticket == null) {
-                    showError("Kein Token:\n" + data.toString().substring(0, Math.min(300, data.toString().length())));
-                    return;
-                }
-
-                String token = ticket.getString("token");
-                prefs.edit()
-                    .putString("token", token)
-                    .putString("region", region)
-                    .putString("email", email)
-                    .putString("password", password)
-                    .apply();
-
-                handler.post(() -> {
-                    showMain();
-                    loadGlucose();
-                    scheduleWorker();
-                });
-
-            } catch (Exception e) {
-                showError("Fehler: " + e.getMessage());
-            }
-        }).start();
-    }
-
-    void loadGlucose() {
-        handler.post(() -> tvLastUpdated.setText("Wird geladen…"));
-        String token  = prefs.getString("token", null);
-        String region = prefs.getString("region", "eu");
-
-        new Thread(() -> {
-            try {
-                JSONObject resp = LibreApi.getGlucose(token, region);
-                String raw = resp.toString();
-
-                if (resp.optInt("status") == 401) {
-                    relogin();
-                    return;
-                }
-
-                // data kann Array oder Objekt sein
-                JSONArray dataArr = null;
-                if (resp.has("data")) {
-                    Object dataObj = resp.get("data");
-                    if (dataObj instanceof JSONArray) {
-                        dataArr = (JSONArray) dataObj;
-                    } else if (dataObj instanceof JSONObject) {
-                        String info = ((JSONObject) dataObj).toString();
-                        handler.post(() -> tvLastUpdated.setText("API Info: " + info.substring(0, Math.min(250, info.length()))));
-                        return;
-                    }
-                }
-
-                if (dataArr == null || dataArr.length() == 0) {
-                    handler.post(() -> tvLastUpdated.setText(
-                        "Keine Verbindungen.\nLibreLinkUp App öffnen und Einladung annehmen!\n\n" +
-                        raw.substring(0, Math.min(200, raw.length()))
-                    ));
-                    return;
-                }
-
-                JSONObject conn = dataArr.getJSONObject(0);
-                JSONObject m = conn.getJSONObject("glucoseMeasurement");
-
-                double value   = m.getDouble("Value");
-                int trend      = m.optInt("TrendArrow", 3);
-                boolean isMmol = m.optInt("GlucoseUnits", 0) == 0;
-
-                String[] arrows     = {"", "↓↓", "↓", "→", "↑", "↑↑"};
-                String[] trendNames = {"", "Schnell fallend", "Fallend", "Stabil", "Steigend", "Schnell steigend"};
-                String arrow     = trend >= 1 && trend <= 5 ? arrows[trend] : "→";
-                String trendName = trend >= 1 && trend <= 5 ? trendNames[trend] : "Stabil";
-                String valStr    = isMmol ? String.format("%.1f", value) : String.valueOf((int) value);
-                String unit      = isMmol ? "mmol/L" : "mg/dL";
-
-                double v = isMmol ? value : value / 18.0;
-                String statusText;
-                int statusColor;
-                if (v < 3.9)        { statusText = "ZU NIEDRIG ⚠"; statusColor = 0xFFFF3B5C; }
-                else if (v < 4.4)   { statusText = "NIEDRIG";       statusColor = 0xFFFF9500; }
-                else if (v <= 10.0) { statusText = "ZIELBEREICH ✓"; statusColor = 0xFF00FF88; }
-                else if (v <= 13.9) { statusText = "ERHÖHT";         statusColor = 0xFFFF9500; }
-                else                { statusText = "ZU HOCH ⚠";     statusColor = 0xFFFF3B5C; }
-
-                prefs.edit()
-                    .putString("last_value", valStr + " " + unit)
-                    .putString("last_trend", arrow)
-                    .putString("last_status", statusText)
-                    .putInt("last_color", statusColor)
-                    .apply();
-
-                GlucoseWidget.updateAll(this);
-
-                final String fVal = valStr, fUnit = unit, fArrow = arrow, fStatus = statusText, fTrend = trendName;
-                final int fColor = statusColor;
-                handler.post(() -> {
-                    tvValue.setText(fVal);
-                    tvValue.setTextColor(fColor);
-                    tvTrend.setText(fArrow);
-                    tvTrend.setTextColor(fColor);
-                    tvStatus.setText(fStatus + " · " + fUnit);
-                    tvStatus.setTextColor(fColor);
-                    tvTime.setText(fTrend);
-                    java.time.LocalTime now = java.time.LocalTime.now();
-                    tvLastUpdated.setText(String.format("Zuletzt: %02d:%02d", now.getHour(), now.getMinute()));
-                });
-
-            } catch (Exception e) {
-                handler.post(() -> tvLastUpdated.setText("Fehler: " + e.getMessage()));
-            }
-        }).start();
-    }
-
-    void relogin() {
-        try {
-            JSONObject result = LibreApi.login(
-                prefs.getString("email", ""),
-                prefs.getString("password", ""),
-                prefs.getString("region", "eu")
-            );
-            JSONObject data = result.optJSONObject("data");
-            if (data != null) {
-                JSONObject ticket = data.optJSONObject("authTicket");
-                if (ticket != null) {
-                    prefs.edit().putString("token", ticket.getString("token")).apply();
-                    loadGlucose();
-                    return;
-                }
-            }
-        } catch (Exception ignored) {}
-        handler.post(this::logout);
-    }
-
-    void scheduleWorker() {
-        PeriodicWorkRequest work = new PeriodicWorkRequest.Builder(
-                GlucoseWorker.class, 15, TimeUnit.MINUTES).build();
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-                "glucose_refresh", ExistingPeriodicWorkPolicy.KEEP, work);
-    }
-
-    void showMain() {
-        handler.post(() -> {
-            loginLayout.setVisibility(View.GONE);
-            mainLayout.setVisibility(View.VISIBLE);
-        });
-    }
-
-    void showError(String msg) {
-        handler.post(() -> {
-            tvLoginError.setText(msg);
-            tvLoginError.setVisibility(View.VISIBLE);
-            btnLogin.setEnabled(true);
-            btnLogin.setText("Verbinden");
-        });
-    }
-
-    void logout() {
-        prefs.edit().clear().apply();
-        WorkManager.getInstance(this).cancelAllWork();
-        handler.post(() -> {
-            mainLayout.setVisibility(View.GONE);
-            loginLayout.setVisibility(View.VISIBLE);
-            btnLogin.setEnabled(true);
-            btnLogin.setText("Verbinden");
-        });
     }
 }

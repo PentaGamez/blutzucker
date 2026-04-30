@@ -1,12 +1,17 @@
 package de.glucose.widget;
 
+import android.Manifest;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.work.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -57,6 +62,18 @@ public class MainActivity extends AppCompatActivity {
         btnRefresh.setOnClickListener(v -> loadGlucose());
         btnLogout.setOnClickListener(v -> logout());
 
+        // Notification Channel erstellen
+        GlucoseNotification.createChannel(this);
+
+        // Benachrichtigungs-Permission anfragen (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+            }
+        }
+
         String token = prefs.getString("token", null);
         if (token != null) {
             showMain();
@@ -84,14 +101,12 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject result = LibreApi.login(email, password, region);
                 String raw = result.toString();
 
-                // Region-Weiterleitung
                 JSONObject data = result.optJSONObject("data");
                 if (data != null && data.optBoolean("redirect", false)) {
                     String newRegion = data.optString("region", "eu");
                     result = LibreApi.login(email, password, newRegion);
                     data = result.optJSONObject("data");
                     prefs.edit().putString("region", newRegion).apply();
-                    region.equals(newRegion);
                 }
 
                 if (data == null) {
@@ -105,14 +120,9 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                String token = ticket.getString("token");
-
-                // accountId aus Login-Antwort holen
-                JSONObject user = data.optJSONObject("user");
-                String accountId = "";
-                if (user != null) {
-                    accountId = user.optString("id", "");
-                }
+                String token     = ticket.getString("token");
+                JSONObject user  = data.optJSONObject("user");
+                String accountId = user != null ? user.optString("id", "") : "";
 
                 prefs.edit()
                     .putString("token", token)
@@ -145,34 +155,25 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject resp = LibreApi.getGlucose(token, accountId, region);
                 String raw = resp.toString();
 
-                if (resp.optInt("status") == 401) {
-                    relogin();
-                    return;
-                }
+                if (resp.optInt("status") == 401) { relogin(); return; }
 
                 JSONArray dataArr = null;
                 if (resp.has("data")) {
                     Object dataObj = resp.get("data");
-                    if (dataObj instanceof JSONArray) {
-                        dataArr = (JSONArray) dataObj;
-                    } else if (dataObj instanceof JSONObject) {
+                    if (dataObj instanceof JSONArray) dataArr = (JSONArray) dataObj;
+                    else if (dataObj instanceof JSONObject) {
                         String info = ((JSONObject) dataObj).toString();
-                        handler.post(() -> tvLastUpdated.setText("API Info: " + info.substring(0, Math.min(250, info.length()))));
+                        handler.post(() -> tvLastUpdated.setText("API: " + info.substring(0, Math.min(200, info.length()))));
                         return;
                     }
                 }
 
                 if (dataArr == null || dataArr.length() == 0) {
-                    handler.post(() -> tvLastUpdated.setText(
-                        "Keine Verbindungen.\nLibreLinkUp App öffnen und Einladung annehmen!\n\n" +
-                        raw.substring(0, Math.min(200, raw.length()))
-                    ));
+                    handler.post(() -> tvLastUpdated.setText("Keine Daten.\n" + raw.substring(0, Math.min(150, raw.length()))));
                     return;
                 }
 
-                JSONObject conn = dataArr.getJSONObject(0);
-                JSONObject m    = conn.getJSONObject("glucoseMeasurement");
-
+                JSONObject m   = dataArr.getJSONObject(0).getJSONObject("glucoseMeasurement");
                 double value   = m.getDouble("Value");
                 int trend      = m.optInt("TrendArrow", 3);
                 boolean isMmol = m.optInt("GlucoseUnits", 0) == 0;
@@ -185,8 +186,7 @@ public class MainActivity extends AppCompatActivity {
                 String unit      = isMmol ? "mmol/L" : "mg/dL";
 
                 double v = isMmol ? value : value / 18.0;
-                String statusText;
-                int statusColor;
+                String statusText; int statusColor;
                 if (v < 3.9)        { statusText = "ZU NIEDRIG ⚠"; statusColor = 0xFFFF3B5C; }
                 else if (v < 4.4)   { statusText = "NIEDRIG";       statusColor = 0xFFFF9500; }
                 else if (v <= 10.0) { statusText = "ZIELBEREICH ✓"; statusColor = 0xFF00FF88; }
@@ -200,7 +200,9 @@ public class MainActivity extends AppCompatActivity {
                     .putInt("last_color", statusColor)
                     .apply();
 
+                // Widget + Benachrichtigung aktualisieren
                 GlucoseWidget.updateAll(this);
+                GlucoseNotification.update(this);
 
                 final String fVal = valStr, fUnit = unit, fArrow = arrow, fStatus = statusText, fTrend = trendName;
                 final int fColor = statusColor;
@@ -234,10 +236,9 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject ticket = data.optJSONObject("authTicket");
                 JSONObject user   = data.optJSONObject("user");
                 if (ticket != null) {
-                    String accountId = user != null ? user.optString("id", "") : "";
                     prefs.edit()
                         .putString("token", ticket.getString("token"))
-                        .putString("accountId", accountId)
+                        .putString("accountId", user != null ? user.optString("id", "") : "")
                         .apply();
                     loadGlucose();
                     return;
@@ -273,6 +274,7 @@ public class MainActivity extends AppCompatActivity {
     void logout() {
         prefs.edit().clear().apply();
         WorkManager.getInstance(this).cancelAllWork();
+        GlucoseNotification.cancel(this);
         handler.post(() -> {
             mainLayout.setVisibility(View.GONE);
             loginLayout.setVisibility(View.VISIBLE);

@@ -38,12 +38,9 @@ public class GlucoseWorker extends Worker {
                     JSONObject ticket = data.optJSONObject("authTicket");
                     JSONObject user   = data.optJSONObject("user");
                     if (ticket != null) {
-                        token = ticket.getString("token");
+                        token     = ticket.getString("token");
                         accountId = user != null ? user.optString("id", "") : "";
-                        prefs.edit()
-                            .putString("token", token)
-                            .putString("accountId", accountId)
-                            .apply();
+                        prefs.edit().putString("token", token).putString("accountId", accountId).apply();
                         resp = LibreApi.getGlucose(token, accountId, region);
                     }
                 }
@@ -52,8 +49,7 @@ public class GlucoseWorker extends Worker {
             JSONArray dataArr = resp.optJSONArray("data");
             if (dataArr == null || dataArr.length() == 0) return Result.retry();
 
-            JSONObject m = dataArr.getJSONObject(0).getJSONObject("glucoseMeasurement");
-
+            JSONObject m   = dataArr.getJSONObject(0).getJSONObject("glucoseMeasurement");
             double value   = m.getDouble("Value");
             int trend      = m.optInt("TrendArrow", 3);
             boolean isMmol = m.optInt("GlucoseUnits", 0) == 0;
@@ -63,8 +59,7 @@ public class GlucoseWorker extends Worker {
             String arrow  = trend >= 1 && trend <= 5 ? arrows[trend] : "→";
 
             double v = isMmol ? value : value / 18.0;
-            String statusText;
-            int statusColor;
+            String statusText; int statusColor;
             if (v < 3.9)        { statusText = "ZU NIEDRIG ⚠"; statusColor = 0xFFFF3B5C; }
             else if (v < 4.4)   { statusText = "NIEDRIG";       statusColor = 0xFFFF9500; }
             else if (v <= 10.0) { statusText = "ZIELBEREICH";   statusColor = 0xFF00FF88; }
@@ -79,6 +74,7 @@ public class GlucoseWorker extends Worker {
                 .apply();
 
             GlucoseWidget.updateAll(getApplicationContext());
+            GlucoseNotification.update(getApplicationContext());
             return Result.success();
 
         } catch (Exception e) {

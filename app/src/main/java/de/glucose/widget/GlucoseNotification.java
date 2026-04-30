@@ -33,39 +33,76 @@ public class GlucoseNotification {
     }
 
     /**
-     * Rendert den Wert als Icon.
-     * Trick: Wir nutzen ein quadratisches Bitmap mit sehr großer Schrift,
-     * damit Android nach dem Verkleinern noch lesbare Zahlen zeigt.
-     * Der Text wird so groß wie möglich gezeichnet und füllt das Bitmap fast komplett aus.
+     * Großes rundes Icon mit Wert + Pfeil – wird als LargeIcon angezeigt
+     * (links in der Notification, groß wie WhatsApp-Profilbild).
      */
-    private static Bitmap createValueIcon(String value, String trend) {
-        int size = 256; // groß rendern, Android skaliert runter – Qualität bleibt
+    private static Bitmap createLargeIcon(String value, String trend, int color) {
+        int size = 256;
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
 
+        // Dunkler Kreis als Hintergrund
+        Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bgPaint.setColor(Color.argb(220, 20, 20, 20));
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint);
+
+        // Farbiger Ring außen
+        Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ringPaint.setColor(color);
+        ringPaint.setStyle(Paint.Style.STROKE);
+        ringPaint.setStrokeWidth(10f);
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f - 5f, ringPaint);
+
         String label = value + trend; // z.B. "5.4→"
 
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.LINEAR_TEXT_FLAG);
+        Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setColor(color);
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+
+        // Schriftgröße automatisch anpassen
+        float targetWidth = size * 0.80f;
+        float textSize = 120f;
+        textPaint.setTextSize(textSize);
+        while (textPaint.measureText(label) > targetWidth && textSize > 20f) {
+            textSize -= 2f;
+            textPaint.setTextSize(textSize);
+        }
+
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float y = size / 2f - (fm.ascent + fm.descent) / 2f;
+        canvas.drawText(label, size / 2f, y, textPaint);
+
+        return bmp;
+    }
+
+    /**
+     * Kleines weißes Icon für die schmale Statusleiste oben –
+     * Android erzwingt hier immer Weiß und ~24dp, Text wäre zu klein.
+     * Daher nur die Träne als Erkennungszeichen.
+     */
+    private static Bitmap createSmallIcon(String value, String trend) {
+        int size = 256;
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bmp);
+
+        String label = value + trend;
+
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.WHITE);
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
 
-        // Schriftgröße automatisch so groß wie möglich wählen damit Text das Icon füllt
-        // Zielbreite: 90% des Bitmaps
         float targetWidth = size * 0.90f;
-        float textSize = 200f;
+        float textSize = 180f;
         paint.setTextSize(textSize);
-
-        // Solange verkleinern bis Text reinpasst
         while (paint.measureText(label) > targetWidth && textSize > 20f) {
             textSize -= 2f;
             paint.setTextSize(textSize);
         }
 
-        // Vertikal zentrieren
         Paint.FontMetrics fm = paint.getFontMetrics();
         float y = size / 2f - (fm.ascent + fm.descent) / 2f;
-
         canvas.drawText(label, size / 2f, y, paint);
         return bmp;
     }
@@ -77,10 +114,10 @@ public class GlucoseNotification {
         String status = prefs.getString("last_status", "");
         int    color  = prefs.getInt("last_color",     0xFF00FF88);
 
-        // Nur Zahl extrahieren: "17.6 mmol/L" → "17.6"
-        String shortValue = value.split(" ")[0];
+        String shortValue = value.split(" ")[0]; // "17.6 mmol/L" → "17.6"
 
-        Bitmap iconBitmap = createValueIcon(shortValue, trend);
+        Bitmap largeIcon = createLargeIcon(shortValue, trend, color);
+        Bitmap smallIcon = createSmallIcon(shortValue, trend);
 
         Intent openApp = new Intent(ctx, MainActivity.class);
         openApp.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -88,7 +125,8 @@ public class GlucoseNotification {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification notif = new NotificationCompat.Builder(ctx, CHANNEL_ID)
-                .setSmallIcon(IconCompat.createWithBitmap(iconBitmap))
+                .setSmallIcon(IconCompat.createWithBitmap(smallIcon)) // oben links (immer klein)
+                .setLargeIcon(largeIcon)                              // großes Icon links in Notification
                 .setContentTitle(value + "  " + trend)
                 .setContentText(status)
                 .setContentIntent(pi)

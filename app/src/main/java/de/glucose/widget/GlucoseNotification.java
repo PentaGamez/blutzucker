@@ -2,6 +2,7 @@ package de.glucose.widget;
 
 import android.app.*;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.*;
 import android.os.Build;

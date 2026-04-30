@@ -33,40 +33,40 @@ public class GlucoseNotification {
     }
 
     /**
-     * Rendert Wert + Trendpfeil als weißes Bitmap-Icon.
-     * In der Statusleiste oben links sichtbar (Android erzwingt Weiß dort).
-     * Im Notification Shade wird es in der richtigen Farbe angezeigt.
-     *
-     * Beispiel: "5.4→"  oder  "17.6↑"
+     * Rendert den Wert als Icon.
+     * Trick: Wir nutzen ein quadratisches Bitmap mit sehr großer Schrift,
+     * damit Android nach dem Verkleinern noch lesbare Zahlen zeigt.
+     * Der Text wird so groß wie möglich gezeichnet und füllt das Bitmap fast komplett aus.
      */
     private static Bitmap createValueIcon(String value, String trend) {
-        // Breites Bitmap damit Wert + Pfeil nebeneinander passen
-        int width  = 160;
-        int height = 80;
-        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        int size = 256; // groß rendern, Android skaliert runter – Qualität bleibt
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
 
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        String label = value + trend; // z.B. "5.4→"
+
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.LINEAR_TEXT_FLAG);
         paint.setColor(Color.WHITE);
         paint.setTextAlign(Paint.Align.CENTER);
-        paint.setFakeBoldText(true);
-        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
 
-        String label = value + trend;  // z.B. "5.4→" oder "17.6↑"
-
-        // Schriftgröße je nach Länge anpassen
-        float textSize;
-        if (label.length() <= 4)      textSize = 44f;
-        else if (label.length() <= 5) textSize = 38f;
-        else                          textSize = 30f;
-
+        // Schriftgröße automatisch so groß wie möglich wählen damit Text das Icon füllt
+        // Zielbreite: 90% des Bitmaps
+        float targetWidth = size * 0.90f;
+        float textSize = 200f;
         paint.setTextSize(textSize);
+
+        // Solange verkleinern bis Text reinpasst
+        while (paint.measureText(label) > targetWidth && textSize > 20f) {
+            textSize -= 2f;
+            paint.setTextSize(textSize);
+        }
 
         // Vertikal zentrieren
         Paint.FontMetrics fm = paint.getFontMetrics();
-        float y = height / 2f - (fm.ascent + fm.descent) / 2f;
+        float y = size / 2f - (fm.ascent + fm.descent) / 2f;
 
-        canvas.drawText(label, width / 2f, y, paint);
+        canvas.drawText(label, size / 2f, y, paint);
         return bmp;
     }
 
@@ -88,7 +88,7 @@ public class GlucoseNotification {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification notif = new NotificationCompat.Builder(ctx, CHANNEL_ID)
-                .setSmallIcon(IconCompat.createWithBitmap(iconBitmap))  // Wert+Pfeil in Statusleiste
+                .setSmallIcon(IconCompat.createWithBitmap(iconBitmap))
                 .setContentTitle(value + "  " + trend)
                 .setContentText(status)
                 .setContentIntent(pi)

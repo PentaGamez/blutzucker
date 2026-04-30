@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0A0F">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- ═══ LOGIN LAYOUT ═══ -->
+        <LinearLayout
+            android:id="@+id/loginLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="60dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Blutzucker"
+                android:textColor="#E8E8F0"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="FreeStyle Libre · LibreView"
+                android:textColor="#66E8E8F0"
+                android:textSize="14sp"
+                android:layout_marginBottom="32dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Voraussetzung: In FreeStyle LibreLink → Menü → Verbundene Apps → LibreLinkUp → eigene E-Mail einladen"
+                android:textColor="#AA00FF88"
+                android:textSize="12sp"
+                android:background="#0D00FF88"
+                android:padding="12dp"
+                android:layout_marginBottom="20dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="E-MAIL"
+                android:textColor="#6600FF88"
+                android:textSize="10sp"
+                android:letterSpacing="0.15"
+                android:layout_marginBottom="6dp"/>
+
+            <EditText
+                android:id="@+id/etEmail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textEmailAddress"
+                android:hint="deine@email.de"
+                android:textColor="#E8E8F0"
+                android:textColorHint="#44E8E8F0"
+                android:background="@drawable/input_bg"
+                android:padding="14dp"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PASSWORT"
+                android:textColor="#6600FF88"
+                android:textSize="10sp"
+                android:letterSpacing="0.15"
+                android:layout_marginBottom="6dp"/>
+
+            <EditText
+                android:id="@+id/etPassword"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textPassword"
+                android:hint="••••••••"
+                android:textColor="#E8E8F0"
+                android:textColorHint="#44E8E8F0"
+                android:background="@drawable/input_bg"
+                android:padding="14dp"
+                android:layout_marginBottom="12dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="REGION"
+                android:textColor="#6600FF88"
+                android:textSize="10sp"
+                android:letterSpacing="0.15"
+                android:layout_marginBottom="6dp"/>
+
+            <Spinner
+                android:id="@+id/spRegion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/input_bg"
+                android:padding="14dp"
+                android:layout_marginBottom="20dp"/>
+
+            <Button
+                android:id="@+id/btnLogin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Verbinden"
+                android:textColor="#000000"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:background="@drawable/btn_green"
+                android:padding="14dp"/>
+
+            <TextView
+                android:id="@+id/tvLoginError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FF3B5C"
+                android:textSize="13sp"
+                android:padding="12dp"
+                android:layout_marginTop="10dp"
+                android:background="#1AFF3B5C"
+                android:visibility="gone"/>
+
+        </LinearLayout>
+
+        <!-- ═══ MAIN LAYOUT ═══ -->
+        <LinearLayout
+            android:id="@+id/mainLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="48dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AKTUELLER BLUTZUCKER"
+                android:textColor="#44E8E8F0"
+                android:textSize="10sp"
+                android:letterSpacing="0.15"
+                android:layout_marginBottom="8dp"/>
+
+            <!-- Value Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_bg"
+                android:padding="24dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/tvValue"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="--"
+                        android:textColor="#00FF88"
+                        android:textSize="72sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="-0.05"/>
+
+                    <TextView
+                        android:id="@+id/tvTrend"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="→"
+                        android:textColor="#00FF88"
+                        android:textSize="36sp"
+                        android:paddingBottom="8dp"/>
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="#00FF88"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1"
+                    android:layout_marginTop="4dp"/>
+
+                <TextView
+                    android:id="@+id/tvTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="#44E8E8F0"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp"/>
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvLastUpdated"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Nie aktualisiert"
+                android:textColor="#33E8E8F0"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:layout_marginBottom="20dp"/>
+
+            <Button
+                android:id="@+id/btnRefresh"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="↻  Aktualisieren"
+                android:textColor="#E8E8F0"
+                android:background="@drawable/btn_dark"
+                android:padding="13dp"
+                android:layout_marginBottom="10dp"/>
+
+            <Button
+                android:id="@+id/btnLogout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Abmelden"
+                android:textColor="#FF3B5C"
+                android:background="@drawable/btn_danger"
+                android:padding="13dp"/>
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

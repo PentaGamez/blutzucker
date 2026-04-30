@@ -5,6 +5,7 @@ import okhttp3.*;
 
 public class LibreApi {
 
+    // OkHttp handhabt gzip automatisch wenn wir Accept-Encoding NICHT manuell setzen
     private static final OkHttpClient client = new OkHttpClient.Builder()
             .followRedirects(true)
             .build();
@@ -17,7 +18,6 @@ public class LibreApi {
                 .add("product", "llu.android")
                 .add("version", "4.16.0")
                 .add("Accept", "application/json")
-                .add("Accept-Encoding", "gzip")
                 .add("Cache-Control", "no-cache")
                 .add("Connection", "keep-alive")
                 .add("Pragma", "no-cache")
@@ -40,7 +40,9 @@ public class LibreApi {
                 .build();
 
         try (Response resp = client.newCall(req).execute()) {
-            return new JSONObject(resp.body().string());
+            String bodyStr = resp.body().string();
+            android.util.Log.d("LibreApi", "Login raw: " + bodyStr);
+            return new JSONObject(bodyStr);
         }
     }
 
@@ -55,7 +57,9 @@ public class LibreApi {
 
         try (Response resp = client.newCall(req).execute()) {
             if (resp.code() == 401) return new JSONObject("{\"status\":401}");
-            return new JSONObject(resp.body().string());
+            String bodyStr = resp.body().string();
+            android.util.Log.d("LibreApi", "Glucose raw: " + bodyStr);
+            return new JSONObject(bodyStr);
         }
     }
 }

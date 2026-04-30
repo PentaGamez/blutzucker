@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -14,7 +15,6 @@
         android:theme="@style/Theme.Glucose"
         android:usesCleartextTraffic="false">
 
-        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,10 +25,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Widget -->
-        <receiver
-            android:name=".GlucoseWidget"
-            android:exported="true">
+        <receiver android:name=".GlucoseWidget" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -37,7 +34,6 @@
                 android:resource="@xml/widget_info" />
         </receiver>
 
-        <!-- Background Worker -->
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
